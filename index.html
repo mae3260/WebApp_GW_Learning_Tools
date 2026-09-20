@@ -113,12 +113,19 @@
       <section id="part-bode">
         <h2 class="section-title">Bode Plot Generator</h2>
         <p class="instructions">
-          Build a transfer function from its zeros, poles, and gain, then generate the exact magnitude and
-          phase (Bode) plot to compare against your hand-drawn sketch.
+          Define a transfer function &mdash; either by building it from zeros, poles, and gain, or by typing
+          its numerator/denominator directly &mdash; then generate the exact magnitude and phase (Bode) plot
+          to compare against your hand-drawn sketch.
         </p>
+
+        <div style="display:flex; gap:10px; margin-bottom:18px;">
+          <button class="run-btn" id="btn-mode-zpk">BUILD FROM ZEROS &amp; POLES</button>
+          <button class="run-btn secondary" id="btn-mode-direct">TYPE TRANSFER FUNCTION DIRECTLY</button>
+        </div>
+
         <div class="eq-block" id="eq-tf"></div>
 
-        <div class="panel-box">
+        <div class="panel-box" id="panel-zpk">
           <h4>Gain</h4>
           <div class="gain-row">
             <label>K =</label>
@@ -151,6 +158,24 @@
             <p class="empty-hint" id="hint-pair-poles">No complex pole pairs added.</p>
             <div id="list-pair-poles"></div>
             <button class="add-row-btn" id="btn-add-pair-pole">+ add complex pole pair</button>
+          </div>
+        </div>
+
+        <div class="panel-box" id="panel-direct" style="display:none;">
+          <h4>Numerator</h4>
+          <div class="field" style="margin-bottom:18px;">
+            <label>coefficients, highest power of s first</label>
+            <input type="text" id="input-num-coeffs" value="" placeholder="e.g. 2 2  (for 2s + 2)" spellcheck="false" />
+          </div>
+          <h4>Denominator</h4>
+          <div class="field">
+            <label>coefficients, highest power of s first</label>
+            <input type="text" id="input-den-coeffs" value="" placeholder="e.g. 1 54 300 5000" spellcheck="false" />
+          </div>
+          <div class="note-box" style="margin: 16px 0 0 0;">
+            Enter coefficients separated by spaces or commas, same convention as MATLAB's <code>tf(num, den)</code>.
+            E.g. numerator <code>2 2</code> means 2s + 2; denominator <code>1 54 300 5000</code> means
+            s&sup3; + 54s&sup2; + 300s + 5000.
           </div>
         </div>
 
@@ -205,6 +230,23 @@
     realPoles: [],
     pairPoles: [],
   };
+  let mode = "zpk"; // "zpk" (build from zeros/poles/gain) or "direct" (typed num/den coefficients)
+
+  function setMode(newMode) {
+    mode = newMode;
+    const zpkBtn = document.getElementById("btn-mode-zpk");
+    const directBtn = document.getElementById("btn-mode-direct");
+    document.getElementById("panel-zpk").style.display = mode === "zpk" ? "block" : "none";
+    document.getElementById("panel-direct").style.display = mode === "direct" ? "block" : "none";
+    zpkBtn.className = mode === "zpk" ? "run-btn" : "run-btn secondary";
+    directBtn.className = mode === "direct" ? "run-btn" : "run-btn secondary";
+    document.getElementById("err-bode").textContent = "";
+    renderEquation();
+  }
+  document.getElementById("btn-mode-zpk").addEventListener("click", () => setMode("zpk"));
+  document.getElementById("btn-mode-direct").addEventListener("click", () => setMode("direct"));
+  document.getElementById("input-num-coeffs").addEventListener("input", renderEquation);
+  document.getElementById("input-den-coeffs").addEventListener("input", renderEquation);
 
   function renderRealList(containerId, hintId, arr, addLabel) {
     const host = document.getElementById(containerId);
@@ -306,18 +348,51 @@
     const c = fmt(pair.wn * pair.wn);
     return `(s^{2} + ${b}s + ${c})`;
   }
+  // Parses a whitespace/comma-separated coefficient string (highest power
+  // of s first, MATLAB tf(num,den) convention) into an array of numbers.
+  function parseCoeffs(str) {
+    const parts = str.trim().split(/[\s,]+/).filter((s) => s.length > 0);
+    return parts.map(Number);
+  }
+  function polyLatex(coeffs) {
+    if (coeffs.length === 0) return "0";
+    const n = coeffs.length - 1;
+    const terms = [];
+    coeffs.forEach((c, idx) => {
+      if (!isFinite(c) || c === 0) return;
+      const power = n - idx;
+      const absC = Math.abs(c);
+      const coefStr = (absC === 1 && power !== 0) ? "" : fmt(absC);
+      let term;
+      if (power === 0) term = fmt(absC);
+      else if (power === 1) term = `${coefStr}s`;
+      else term = `${coefStr}s^{${power}}`;
+      terms.push({ sign: c < 0 ? "-" : "+", term });
+    });
+    if (terms.length === 0) return "0";
+    let out = (terms[0].sign === "-" ? "-" : "") + terms[0].term;
+    for (let i = 1; i < terms.length; i++) out += ` ${terms[i].sign} ${terms[i].term}`;
+    return out;
+  }
   function renderEquation() {
-    const numParts = [];
-    if (state.K !== 1 || (state.realZeros.length === 0 && state.pairZeros.length === 0)) numParts.push(fmt(state.K));
-    state.realZeros.forEach((z) => numParts.push(linearFactor(z)));
-    state.pairZeros.forEach((p) => numParts.push(quadFactor(p)));
-    const denParts = [];
-    state.realPoles.forEach((p) => denParts.push(linearFactor(p)));
-    state.pairPoles.forEach((p) => denParts.push(quadFactor(p)));
+    let latex;
+    if (mode === "zpk") {
+      const numParts = [];
+      if (state.K !== 1 || (state.realZeros.length === 0 && state.pairZeros.length === 0)) numParts.push(fmt(state.K));
+      state.realZeros.forEach((z) => numParts.push(linearFactor(z)));
+      state.pairZeros.forEach((p) => numParts.push(quadFactor(p)));
+      const denParts = [];
+      state.realPoles.forEach((p) => denParts.push(linearFactor(p)));
+      state.pairPoles.forEach((p) => denParts.push(quadFactor(p)));
 
-    const numLatex = numParts.length > 0 ? numParts.join(" ") : "0";
-    const denLatex = denParts.length > 0 ? denParts.join(" ") : "1";
-    const latex = `G(s) = \\dfrac{${numLatex}}{${denLatex}}`;
+      const numLatex = numParts.length > 0 ? numParts.join(" ") : "0";
+      const denLatex = denParts.length > 0 ? denParts.join(" ") : "1";
+      latex = `G(s) = \\dfrac{${numLatex}}{${denLatex}}`;
+    } else {
+      const numCoeffs = parseCoeffs(document.getElementById("input-num-coeffs").value);
+      const denCoeffs = parseCoeffs(document.getElementById("input-den-coeffs").value);
+      latex = `G(s) = \\dfrac{${polyLatex(numCoeffs)}}{${polyLatex(denCoeffs)}}`;
+    }
     katex.render(latex, document.getElementById("eq-tf"), { throwOnError: false, displayMode: true });
   }
 
@@ -329,7 +404,7 @@
     const d = b.re * b.re + b.im * b.im;
     return { re: (a.re * b.re + a.im * b.im) / d, im: (a.im * b.re - a.re * b.im) / d };
   }
-  function evalG(w) {
+  function evalGZpk(w) {
     let num = { re: state.K, im: 0 };
     state.realZeros.forEach((z) => { num = cMul(num, { re: z, im: w }); });
     state.pairZeros.forEach((p) => { num = cMul(num, { re: p.wn * p.wn - w * w, im: 2 * p.zeta * p.wn * w }); });
@@ -337,6 +412,59 @@
     state.realPoles.forEach((pl) => { den = cMul(den, { re: pl, im: w }); });
     state.pairPoles.forEach((p) => { den = cMul(den, { re: p.wn * p.wn - w * w, im: 2 * p.zeta * p.wn * w }); });
     return cDiv(num, den);
+  }
+
+  // Evaluates a polynomial (coeffs highest-degree first) at s=jw via
+  // complex Horner's method.
+  function evalPolyComplex(coeffs, w) {
+    let result = { re: 0, im: 0 };
+    const s = { re: 0, im: w };
+    coeffs.forEach((c) => {
+      result = cMul(result, s);
+      result = { re: result.re + c, im: result.im };
+    });
+    return result;
+  }
+  function evalGDirect(numCoeffs, denCoeffs, w) {
+    return cDiv(evalPolyComplex(numCoeffs, w), evalPolyComplex(denCoeffs, w));
+  }
+
+  // Durand-Kerner method: finds all roots of a polynomial (real
+  // coefficients, highest degree first), used only to auto-range the
+  // frequency sweep in "type transfer function directly" mode (the
+  // pole/zero magnitudes set a sensible omega window, same as the
+  // zeros/poles-builder mode's autoRange()).
+  function polyRoots(coeffs) {
+    const c = coeffs.slice();
+    while (c.length > 1 && c[0] === 0) c.shift();
+    const n = c.length - 1;
+    if (n < 1) return [];
+    const lead = c[0];
+    const norm = c.map((v) => v / lead);
+    let roots = [];
+    const seed = { re: 0.4, im: 0.9 };
+    let p = { re: 1, im: 0 };
+    for (let i = 0; i < n; i++) { roots.push(p); p = cMul(p, seed); }
+    for (let iter = 0; iter < 300; iter++) {
+      let maxDelta = 0;
+      const next = roots.slice();
+      for (let i = 0; i < n; i++) {
+        let denom = { re: 1, im: 0 };
+        for (let j = 0; j < n; j++) { if (j !== i) denom = cMul(denom, { re: roots[i].re - roots[j].re, im: roots[i].im - roots[j].im }); }
+        const numVal = evalPolyAt(norm, roots[i]);
+        const delta = cDiv(numVal, denom);
+        next[i] = { re: roots[i].re - delta.re, im: roots[i].im - delta.im };
+        maxDelta = Math.max(maxDelta, Math.sqrt(delta.re * delta.re + delta.im * delta.im));
+      }
+      roots = next;
+      if (maxDelta < 1e-9) break;
+    }
+    return roots;
+  }
+  function evalPolyAt(coeffs, z) {
+    let result = { re: 0, im: 0 };
+    coeffs.forEach((c) => { result = cMul(result, z); result = { re: result.re + c, im: result.im }; });
+    return result;
   }
 
   function unwrapRad(arr) {
@@ -349,16 +477,27 @@
     return out;
   }
 
-  function autoRange() {
+  function rangeFromFeatures(features) {
+    if (features.length === 0) return { wmin: 0.01, wmax: 100 };
+    const wMinFeature = Math.min(...features);
+    const wMaxFeature = Math.max(...features);
+    return { wmin: wMinFeature / 100, wmax: wMaxFeature * 100 };
+  }
+  function autoRangeZpk() {
     const features = [];
     state.realZeros.forEach((z) => { if (Math.abs(z) > 0) features.push(Math.abs(z)); });
     state.pairZeros.forEach((p) => { if (p.wn > 0) features.push(p.wn); });
     state.realPoles.forEach((p) => { if (Math.abs(p) > 0) features.push(Math.abs(p)); });
     state.pairPoles.forEach((p) => { if (p.wn > 0) features.push(p.wn); });
-    if (features.length === 0) return { wmin: 0.01, wmax: 100 };
-    const wMinFeature = Math.min(...features);
-    const wMaxFeature = Math.max(...features);
-    return { wmin: wMinFeature / 100, wmax: wMaxFeature * 100 };
+    return rangeFromFeatures(features);
+  }
+  function autoRangeDirect(numCoeffs, denCoeffs) {
+    const features = [];
+    polyRoots(numCoeffs).concat(polyRoots(denCoeffs)).forEach((r) => {
+      const mag = Math.sqrt(r.re * r.re + r.im * r.im);
+      if (mag > 1e-6) features.push(mag);
+    });
+    return rangeFromFeatures(features);
   }
 
   document.getElementById("input-auto-range").addEventListener("change", (e) => {
@@ -370,18 +509,32 @@
     const errEl = document.getElementById("err-bode");
     errEl.textContent = "";
 
-    if (!isFinite(state.K) || state.K === 0) { errEl.textContent = "Gain K must be a nonzero number."; return; }
-    for (const p of state.pairZeros.concat(state.pairPoles)) {
-      if (!isFinite(p.zeta) || !isFinite(p.wn) || p.wn <= 0) { errEl.textContent = "Each complex pair needs a numeric ζ and a positive ωn."; return; }
+    let gAt; // function(w) -> {re, im}, set below per mode
+    let numCoeffs, denCoeffs;
+
+    if (mode === "zpk") {
+      if (!isFinite(state.K) || state.K === 0) { errEl.textContent = "Gain K must be a nonzero number."; return; }
+      for (const p of state.pairZeros.concat(state.pairPoles)) {
+        if (!isFinite(p.zeta) || !isFinite(p.wn) || p.wn <= 0) { errEl.textContent = "Each complex pair needs a numeric ζ and a positive ωn."; return; }
+      }
+      for (const v of state.realZeros.concat(state.realPoles)) {
+        if (!isFinite(v)) { errEl.textContent = "All real zero/pole values must be numbers."; return; }
+      }
+      if (state.realPoles.length === 0 && state.pairPoles.length === 0) { errEl.textContent = "Add at least one pole."; return; }
+      gAt = evalGZpk;
+    } else {
+      numCoeffs = parseCoeffs(document.getElementById("input-num-coeffs").value);
+      denCoeffs = parseCoeffs(document.getElementById("input-den-coeffs").value);
+      if (numCoeffs.length === 0 || denCoeffs.length === 0 || numCoeffs.some((c) => !isFinite(c)) || denCoeffs.some((c) => !isFinite(c))) {
+        errEl.textContent = "Enter numeric coefficients for both numerator and denominator.";
+        return;
+      }
+      gAt = (w) => evalGDirect(numCoeffs, denCoeffs, w);
     }
-    for (const v of state.realZeros.concat(state.realPoles)) {
-      if (!isFinite(v)) { errEl.textContent = "All real zero/pole values must be numbers."; return; }
-    }
-    if (state.realPoles.length === 0 && state.pairPoles.length === 0) { errEl.textContent = "Add at least one pole."; return; }
 
     let wmin, wmax;
     if (document.getElementById("input-auto-range").checked) {
-      const r = autoRange();
+      const r = mode === "zpk" ? autoRangeZpk() : autoRangeDirect(numCoeffs, denCoeffs);
       wmin = r.wmin; wmax = r.wmax;
       document.getElementById("input-wmin").value = wmin;
       document.getElementById("input-wmax").value = wmax;
@@ -400,7 +553,7 @@
     const magDb = [];
     const phaseRadRaw = [];
     wArr.forEach((w) => {
-      const g = evalG(w);
+      const g = gAt(w);
       const mag = Math.sqrt(g.re * g.re + g.im * g.im);
       magDb.push(20 * Math.log10(mag));
       phaseRadRaw.push(Math.atan2(g.im, g.re));
@@ -418,7 +571,7 @@
   });
 
   renderAllLists();
-  renderEquation();
+  setMode("zpk");
 })();
 </script>
 </body>
