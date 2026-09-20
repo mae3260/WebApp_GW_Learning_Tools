@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GroupWork 6W &mdash; Bode Plot Generator</title>
+
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.17.0/katex.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.17.0/katex.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --ink: #0F1115; --panel: #171A21; --panel2: #1D212B; --line: #282D3A;
+    --amber: #FFB454; --cyan: #5EEAD4; --rose: #FB7185; --pink: #F472B6;
+    --fg: #E7E9EE; --muted: #8B92A5;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--ink); color: var(--fg); font-family: 'Inter', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--amber); }
+  header h1 { font-size: 14px; margin: 0; font-weight: 600; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.02em; }
+  header h1 span { color: var(--muted); font-weight: 400; }
+
+  main { flex: 1; display: flex; overflow: hidden; }
+  nav { width: 220px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--line); order: 2; padding: 16px 14px; overflow-y: auto; }
+  nav p.label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin: 14px 0 8px 0; }
+  nav p.label:first-child { margin-top: 0; }
+  .nav-btn { display: block; width: 100%; text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 9px 12px; margin-bottom: 6px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; color: var(--fg); cursor: pointer; }
+  .nav-btn.active { border-color: var(--amber); color: var(--amber); }
+  .nav-btn small { display: block; font-family: 'Inter', sans-serif; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .nav-btn.disabled { opacity: 0.4; cursor: default; }
+
+  .content { flex: 1; order: 1; overflow-y: auto; padding: 28px 40px; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+
+  h2.section-title { font-family: 'JetBrains Mono', monospace; font-size: 20px; color: var(--amber); margin: 0 0 14px 0; }
+  h3.problem-title { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: var(--cyan); margin: 0 0 10px 0; }
+  h4.part-title { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--fg); margin: 22px 0 8px 0; }
+  p.instructions { font-size: 14.5px; line-height: 1.65; color: var(--fg); margin: 0 0 16px 0; }
+
+  .eq-block { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; margin: 14px 0; text-align: center; font-size: 16px; overflow-x: auto; }
+  .note-box { background: var(--panel2); border-left: 3px solid var(--amber); border-radius: 4px; padding: 12px 16px; margin: 0 0 18px 0; font-size: 13px; line-height: 1.6; color: var(--fg); }
+  .note-box code { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--cyan); background: var(--ink); padding: 1px 5px; border-radius: 3px; }
+
+  .panel-box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; margin-bottom: 18px; }
+  .panel-box h4 { margin: 0 0 12px 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .field { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .field label { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .field input[type="text"], .field input[type="number"] { width: 100%; background: var(--ink); border: 1px solid var(--line); border-radius: 5px; color: var(--fg); font-family: 'JetBrains Mono', monospace; font-size: 14px; padding: 8px 10px; }
+  .field input:focus { outline: none; border-color: var(--amber); }
+
+  .gain-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .gain-row label { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--muted); }
+  .gain-row input { width: 140px; background: var(--ink); border: 1px solid var(--line); border-radius: 5px; color: var(--fg); font-family: 'JetBrains Mono', monospace; font-size: 14px; padding: 8px 10px; }
+  .gain-row input:focus { outline: none; border-color: var(--amber); }
+
+  .factor-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .factor-row .factor-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); width: 90px; flex-shrink: 0; }
+  .factor-row input[type="number"] { width: 110px; background: var(--ink); border: 1px solid var(--line); border-radius: 5px; color: var(--fg); font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 7px 9px; }
+  .factor-row input:focus { outline: none; border-color: var(--amber); }
+  .row-remove { width: 24px; height: 24px; border-radius: 50%; background: var(--rose); color: var(--ink); border: none; cursor: pointer; font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; flex-shrink: 0; }
+  .add-row-btn { font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 7px 14px; border-radius: 6px; border: 1px dashed var(--line); background: none; color: var(--muted); cursor: pointer; margin-top: 4px; }
+  .add-row-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+  .factor-group { margin-bottom: 18px; }
+  .factor-group-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin: 0 0 8px 0; }
+  .empty-hint { font-size: 12px; color: var(--muted); font-style: italic; margin: 0 0 8px 0; }
+
+  .run-btn { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; padding: 10px 22px; border-radius: 6px; border: none; background: var(--amber); color: var(--ink); cursor: pointer; }
+  .run-btn:hover { filter: brightness(1.08); }
+  .run-btn:active { transform: scale(0.98); }
+  .run-btn.secondary { background: none; color: var(--muted); border: 1px solid var(--line); }
+  .run-btn.secondary:hover { color: var(--rose); border-color: var(--rose); }
+
+  .field-err { font-size: 11px; color: var(--rose); margin: 8px 0 0 0; min-height: 14px; font-family: 'JetBrains Mono', monospace; }
+
+  .plot-host { margin-top: 14px; height: 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  .plot-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); margin: 18px 0 0 0; letter-spacing: 0.04em; text-transform: uppercase; }
+
+  .range-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; margin-bottom: 18px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); padding-bottom: 10px; }
+  .checkbox-row input { width: 16px; height: 16px; }
+
+  .katex { color: var(--fg); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="dot"></div>
+  <h1>GROUPWORK 6W <span>&mdash; Bode Plot Generator (M&amp;AE 3260)</span></h1>
+</header>
+
+<main>
+  <nav>
+    <p class="label">TOOLS</p>
+    <button class="nav-btn active" data-part="bode">Bode Plot Generator<small>Zeros, poles &amp; gain</small></button>
+    <button class="nav-btn disabled" disabled><small>More tools coming soon</small></button>
+  </nav>
+
+  <div class="content">
+    <div class="wrap">
+
+      <!-- ============== BODE PLOT GENERATOR ============== -->
+      <section id="part-bode">
+        <h2 class="section-title">Bode Plot Generator</h2>
+        <p class="instructions">
+          Build a transfer function from its zeros, poles, and gain, then generate the exact magnitude and
+          phase (Bode) plot to compare against your hand-drawn sketch.
+        </p>
+        <div class="eq-block" id="eq-tf"></div>
+
+        <div class="panel-box">
+          <h4>Gain</h4>
+          <div class="gain-row">
+            <label>K =</label>
+            <input type="number" id="input-K" value="1" step="any" />
+          </div>
+
+          <h4>Zeros</h4>
+          <div class="factor-group">
+            <p class="factor-group-title">Real zeros &mdash; factor (s + z)</p>
+            <p class="empty-hint" id="hint-real-zeros">No real zeros added.</p>
+            <div id="list-real-zeros"></div>
+            <button class="add-row-btn" id="btn-add-real-zero">+ add real zero</button>
+          </div>
+          <div class="factor-group">
+            <p class="factor-group-title">Complex zero pairs &mdash; factor (s&sup2; + 2&zeta;&omega;n s + &omega;n&sup2;)</p>
+            <p class="empty-hint" id="hint-pair-zeros">No complex zero pairs added.</p>
+            <div id="list-pair-zeros"></div>
+            <button class="add-row-btn" id="btn-add-pair-zero">+ add complex zero pair</button>
+          </div>
+
+          <h4>Poles</h4>
+          <div class="factor-group">
+            <p class="factor-group-title">Real poles &mdash; factor (s + p)</p>
+            <p class="empty-hint" id="hint-real-poles">No real poles added.</p>
+            <div id="list-real-poles"></div>
+            <button class="add-row-btn" id="btn-add-real-pole">+ add real pole</button>
+          </div>
+          <div class="factor-group" style="margin-bottom:0;">
+            <p class="factor-group-title">Complex pole pairs &mdash; factor (s&sup2; + 2&zeta;&omega;n s + &omega;n&sup2;)</p>
+            <p class="empty-hint" id="hint-pair-poles">No complex pole pairs added.</p>
+            <div id="list-pair-poles"></div>
+            <button class="add-row-btn" id="btn-add-pair-pole">+ add complex pole pair</button>
+          </div>
+        </div>
+
+        <div class="panel-box">
+          <h4>Frequency Range [rad/s]</h4>
+          <div class="range-grid">
+            <div class="field"><label>&omega; min</label><input type="number" id="input-wmin" value="0.01" step="any" /></div>
+            <div class="field"><label>&omega; max</label><input type="number" id="input-wmax" value="100" step="any" /></div>
+            <div class="checkbox-row"><input type="checkbox" id="input-auto-range" checked /><label for="input-auto-range">Auto range</label></div>
+          </div>
+          <button class="run-btn" id="btn-generate">GENERATE BODE PLOT</button>
+          <p class="field-err" id="err-bode"></p>
+        </div>
+
+        <p class="plot-label">amplitude ratio |G(j&omega;)| [dB]</p>
+        <div class="plot-host" id="plot-bode-mag"><div class="placeholder"></div></div>
+        <p class="plot-label">phase difference [degrees]</p>
+        <div class="plot-host" id="plot-bode-phase"></div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  const PLOT_OPTS = { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] };
+
+  function plotLayout(yTitle, showXTitle) {
+    return {
+      paper_bgcolor: "#171A21",
+      plot_bgcolor: "#171A21",
+      font: { color: "#E7E9EE", family: "JetBrains Mono, monospace", size: 10 },
+      margin: { l: 55, r: 15, t: 10, b: showXTitle ? 40 : 25 },
+      xaxis: { title: showXTitle ? "ω [rad/s]" : "", type: "log", gridcolor: "#282D3A", zerolinecolor: "#282D3A" },
+      yaxis: { title: yTitle, gridcolor: "#282D3A", zerolinecolor: "#282D3A" },
+      showlegend: false,
+    };
+  }
+
+  // ---------------------------------------------------------------
+  // State: the transfer function is built from real zeros/poles
+  // (factor s + a) and complex conjugate zero/pole pairs given by
+  // (zeta, wn) (factor s^2 + 2*zeta*wn*s + wn^2), plus a scalar gain K.
+  // ---------------------------------------------------------------
+  const state = {
+    K: 1,
+    realZeros: [],
+    pairZeros: [],
+    realPoles: [],
+    pairPoles: [],
+  };
+
+  function renderRealList(containerId, hintId, arr, addLabel) {
+    const host = document.getElementById(containerId);
+    const hint = document.getElementById(hintId);
+    hint.style.display = arr.length === 0 ? "block" : "none";
+    host.innerHTML = "";
+    arr.forEach((val, i) => {
+      const row = document.createElement("div");
+      row.className = "factor-row";
+      row.innerHTML = `
+        <span class="factor-label">${addLabel} ${i + 1}</span>
+        <input type="number" step="any" value="${val}" />
+        <button class="row-remove" title="Remove">&times;</button>
+      `;
+      const input = row.querySelector("input");
+      input.addEventListener("input", () => { arr[i] = Number(input.value); renderEquation(); });
+      row.querySelector(".row-remove").addEventListener("click", () => {
+        arr.splice(i, 1);
+        renderRealList(containerId, hintId, arr, addLabel);
+        renderEquation();
+      });
+      host.appendChild(row);
+    });
+  }
+
+  function renderPairList(containerId, hintId, arr, addLabel) {
+    const host = document.getElementById(containerId);
+    const hint = document.getElementById(hintId);
+    hint.style.display = arr.length === 0 ? "block" : "none";
+    host.innerHTML = "";
+    arr.forEach((pair, i) => {
+      const row = document.createElement("div");
+      row.className = "factor-row";
+      row.innerHTML = `
+        <span class="factor-label">${addLabel} ${i + 1}</span>
+        <input type="number" step="any" value="${pair.zeta}" placeholder="ζ" />
+        <input type="number" step="any" value="${pair.wn}" placeholder="ωn" />
+        <button class="row-remove" title="Remove">&times;</button>
+      `;
+      const [zetaInput, wnInput] = row.querySelectorAll("input");
+      zetaInput.addEventListener("input", () => { pair.zeta = Number(zetaInput.value); renderEquation(); });
+      wnInput.addEventListener("input", () => { pair.wn = Number(wnInput.value); renderEquation(); });
+      row.querySelector(".row-remove").addEventListener("click", () => {
+        arr.splice(i, 1);
+        renderPairList(containerId, hintId, arr, addLabel);
+        renderEquation();
+      });
+      host.appendChild(row);
+    });
+  }
+
+  function renderAllLists() {
+    renderRealList("list-real-zeros", "hint-real-zeros", state.realZeros, "zero");
+    renderPairList("list-pair-zeros", "hint-pair-zeros", state.pairZeros, "pair");
+    renderRealList("list-real-poles", "hint-real-poles", state.realPoles, "pole");
+    renderPairList("list-pair-poles", "hint-pair-poles", state.pairPoles, "pair");
+  }
+
+  document.getElementById("btn-add-real-zero").addEventListener("click", () => {
+    state.realZeros.push(1);
+    renderRealList("list-real-zeros", "hint-real-zeros", state.realZeros, "zero");
+    renderEquation();
+  });
+  document.getElementById("btn-add-pair-zero").addEventListener("click", () => {
+    state.pairZeros.push({ zeta: 0.5, wn: 1 });
+    renderPairList("list-pair-zeros", "hint-pair-zeros", state.pairZeros, "pair");
+    renderEquation();
+  });
+  document.getElementById("btn-add-real-pole").addEventListener("click", () => {
+    state.realPoles.push(1);
+    renderRealList("list-real-poles", "hint-real-poles", state.realPoles, "pole");
+    renderEquation();
+  });
+  document.getElementById("btn-add-pair-pole").addEventListener("click", () => {
+    state.pairPoles.push({ zeta: 0.5, wn: 1 });
+    renderPairList("list-pair-poles", "hint-pair-poles", state.pairPoles, "pair");
+    renderEquation();
+  });
+
+  document.getElementById("input-K").addEventListener("input", () => {
+    state.K = Number(document.getElementById("input-K").value);
+    renderEquation();
+  });
+
+  // ---------------------------------------------------------------
+  // Live G(s) equation, built as LaTeX from the current state.
+  // ---------------------------------------------------------------
+  function fmt(n) {
+    if (!isFinite(n)) return "0";
+    const r = Math.round(n * 1000) / 1000;
+    return r.toString();
+  }
+  function linearFactor(val) {
+    if (val >= 0) return `(s + ${fmt(val)})`;
+    return `(s - ${fmt(Math.abs(val))})`;
+  }
+  function quadFactor(pair) {
+    const b = fmt(2 * pair.zeta * pair.wn);
+    const c = fmt(pair.wn * pair.wn);
+    return `(s^{2} + ${b}s + ${c})`;
+  }
+  function renderEquation() {
+    const numParts = [];
+    if (state.K !== 1 || (state.realZeros.length === 0 && state.pairZeros.length === 0)) numParts.push(fmt(state.K));
+    state.realZeros.forEach((z) => numParts.push(linearFactor(z)));
+    state.pairZeros.forEach((p) => numParts.push(quadFactor(p)));
+    const denParts = [];
+    state.realPoles.forEach((p) => denParts.push(linearFactor(p)));
+    state.pairPoles.forEach((p) => denParts.push(quadFactor(p)));
+
+    const numLatex = numParts.length > 0 ? numParts.join(" ") : "0";
+    const denLatex = denParts.length > 0 ? denParts.join(" ") : "1";
+    const latex = `G(s) = \\dfrac{${numLatex}}{${denLatex}}`;
+    katex.render(latex, document.getElementById("eq-tf"), { throwOnError: false, displayMode: true });
+  }
+
+  // ---------------------------------------------------------------
+  // Complex arithmetic + frequency response evaluation.
+  // ---------------------------------------------------------------
+  function cMul(a, b) { return { re: a.re * b.re - a.im * b.im, im: a.re * b.im + a.im * b.re }; }
+  function cDiv(a, b) {
+    const d = b.re * b.re + b.im * b.im;
+    return { re: (a.re * b.re + a.im * b.im) / d, im: (a.im * b.re - a.re * b.im) / d };
+  }
+  function evalG(w) {
+    let num = { re: state.K, im: 0 };
+    state.realZeros.forEach((z) => { num = cMul(num, { re: z, im: w }); });
+    state.pairZeros.forEach((p) => { num = cMul(num, { re: p.wn * p.wn - w * w, im: 2 * p.zeta * p.wn * w }); });
+    let den = { re: 1, im: 0 };
+    state.realPoles.forEach((pl) => { den = cMul(den, { re: pl, im: w }); });
+    state.pairPoles.forEach((p) => { den = cMul(den, { re: p.wn * p.wn - w * w, im: 2 * p.zeta * p.wn * w }); });
+    return cDiv(num, den);
+  }
+
+  function unwrapRad(arr) {
+    const out = arr.slice();
+    for (let i = 1; i < out.length; i++) {
+      let d = out[i] - out[i - 1];
+      while (d > Math.PI) { out[i] -= 2 * Math.PI; d = out[i] - out[i - 1]; }
+      while (d < -Math.PI) { out[i] += 2 * Math.PI; d = out[i] - out[i - 1]; }
+    }
+    return out;
+  }
+
+  function autoRange() {
+    const features = [];
+    state.realZeros.forEach((z) => { if (Math.abs(z) > 0) features.push(Math.abs(z)); });
+    state.pairZeros.forEach((p) => { if (p.wn > 0) features.push(p.wn); });
+    state.realPoles.forEach((p) => { if (Math.abs(p) > 0) features.push(Math.abs(p)); });
+    state.pairPoles.forEach((p) => { if (p.wn > 0) features.push(p.wn); });
+    if (features.length === 0) return { wmin: 0.01, wmax: 100 };
+    const wMinFeature = Math.min(...features);
+    const wMaxFeature = Math.max(...features);
+    return { wmin: wMinFeature / 100, wmax: wMaxFeature * 100 };
+  }
+
+  document.getElementById("input-auto-range").addEventListener("change", (e) => {
+    document.getElementById("input-wmin").disabled = e.target.checked;
+    document.getElementById("input-wmax").disabled = e.target.checked;
+  });
+
+  document.getElementById("btn-generate").addEventListener("click", () => {
+    const errEl = document.getElementById("err-bode");
+    errEl.textContent = "";
+
+    if (!isFinite(state.K) || state.K === 0) { errEl.textContent = "Gain K must be a nonzero number."; return; }
+    for (const p of state.pairZeros.concat(state.pairPoles)) {
+      if (!isFinite(p.zeta) || !isFinite(p.wn) || p.wn <= 0) { errEl.textContent = "Each complex pair needs a numeric ζ and a positive ωn."; return; }
+    }
+    for (const v of state.realZeros.concat(state.realPoles)) {
+      if (!isFinite(v)) { errEl.textContent = "All real zero/pole values must be numbers."; return; }
+    }
+    if (state.realPoles.length === 0 && state.pairPoles.length === 0) { errEl.textContent = "Add at least one pole."; return; }
+
+    let wmin, wmax;
+    if (document.getElementById("input-auto-range").checked) {
+      const r = autoRange();
+      wmin = r.wmin; wmax = r.wmax;
+      document.getElementById("input-wmin").value = wmin;
+      document.getElementById("input-wmax").value = wmax;
+    } else {
+      wmin = Number(document.getElementById("input-wmin").value);
+      wmax = Number(document.getElementById("input-wmax").value);
+    }
+    if (!isFinite(wmin) || !isFinite(wmax) || wmin <= 0 || wmax <= wmin) {
+      errEl.textContent = "ω min must be positive and less than ω max.";
+      return;
+    }
+
+    const N = 400;
+    const logMin = Math.log10(wmin), logMax = Math.log10(wmax);
+    const wArr = Array.from({ length: N }, (_, i) => Math.pow(10, logMin + ((logMax - logMin) * i) / (N - 1)));
+    const magDb = [];
+    const phaseRadRaw = [];
+    wArr.forEach((w) => {
+      const g = evalG(w);
+      const mag = Math.sqrt(g.re * g.re + g.im * g.im);
+      magDb.push(20 * Math.log10(mag));
+      phaseRadRaw.push(Math.atan2(g.im, g.re));
+    });
+    const phaseUnwrapped = unwrapRad(phaseRadRaw);
+    const phaseDeg = phaseUnwrapped.map((r) => (r * 180) / Math.PI);
+
+    Plotly.newPlot("plot-bode-mag", [
+      { x: wArr, y: magDb, mode: "lines", line: { color: "#5EEAD4", width: 2.5 } },
+    ], plotLayout("magnitude [dB]", false), PLOT_OPTS);
+
+    Plotly.newPlot("plot-bode-phase", [
+      { x: wArr, y: phaseDeg, mode: "lines", line: { color: "#FFB454", width: 2.5 } },
+    ], plotLayout("phase [deg]", true), PLOT_OPTS);
+  });
+
+  renderAllLists();
+  renderEquation();
+})();
+</script>
+</body>
+</html>
