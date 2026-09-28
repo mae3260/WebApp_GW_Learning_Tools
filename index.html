@@ -589,6 +589,52 @@
 
       const PLOT_OPTS = { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] };
 
+      // ---------------------------------------------------------------
+      // Log-axis tick labels. Plotly's default labels the in-between ticks
+      // with bare digits ("2", "5"), which read like whole numbers. Instead:
+      // zoomed out, label only the powers of 10 (like MATLAB); zoomed in,
+      // label the in-between ticks with their full value (0.2, 20, ...).
+      // Re-applied on every zoom/pan and on double-click reset.
+      // ---------------------------------------------------------------
+      function logTickSpec(range, power) {
+        const lo = Math.min(range[0], range[1]), hi = Math.max(range[0], range[1]);
+        const span = hi - lo;
+        const mults = span > 1.3 ? [1] : span > 0.5 ? [1, 2, 5] : [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        const vals = [], text = [];
+        for (let d = Math.floor(lo); d <= Math.ceil(hi); d++) {
+          mults.forEach((m) => {
+            const lv = d + Math.log10(m);
+            if (lv < lo - 1e-9 || lv > hi + 1e-9) return;
+            const v = m * Math.pow(10, d);
+            vals.push(v);
+            text.push(power && m === 1 ? `10<sup>${d}</sup>` : String(Number(v.toPrecision(3))));
+          });
+        }
+        if (vals.length < 2) return { tickmode: "auto", tickvals: null, ticktext: null };
+        return { tickmode: "array", tickvals: vals, ticktext: text };
+      }
+      function applyLogTicks(gd, power) {
+        const update = {};
+        ["xaxis", "yaxis"].forEach((ax) => {
+          const fa = gd._fullLayout && gd._fullLayout[ax];
+          if (!fa || fa.type !== "log") return;
+          Object.entries(logTickSpec(fa.range, power)).forEach(([k, v]) => { update[`${ax}.${k}`] = v; });
+        });
+        if (Object.keys(update).length) Plotly.relayout(gd, update);
+      }
+      function newLogPlot(divId, data, layout, config) {
+        return Plotly.newPlot(divId, data, layout, config).then((gd) => {
+          if (gd._logTickHandler) gd.removeListener("plotly_relayout", gd._logTickHandler);
+          gd._logTickHandler = (ev) => {
+            if (Object.keys(ev).every((k) => /tick/.test(k))) return; // our own relayout
+            applyLogTicks(gd, false);
+          };
+          gd.on("plotly_relayout", gd._logTickHandler);
+          applyLogTicks(gd, false);
+          return gd;
+        });
+      }
+
       function plotLayout(yTitle, showXTitle) {
         return {
           paper_bgcolor: "#171A21",
@@ -944,11 +990,11 @@
         const phaseUnwrapped = unwrapRad(phaseRadRaw);
         const phaseDeg = phaseUnwrapped.map((r) => (r * 180) / Math.PI);
 
-        Plotly.newPlot("plot-bode-mag", [
+        newLogPlot("plot-bode-mag", [
           { x: wArr, y: magDb, mode: "lines", line: { color: "#5EEAD4", width: 2.5 } },
         ], plotLayout("magnitude [dB]", false), PLOT_OPTS);
 
-        Plotly.newPlot("plot-bode-phase", [
+        newLogPlot("plot-bode-phase", [
           { x: wArr, y: phaseDeg, mode: "lines", line: { color: "#FFB454", width: 2.5 } },
         ], plotLayout("phase [deg]", true), PLOT_OPTS);
       });
